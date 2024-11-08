@@ -1,7 +1,12 @@
 import sqlite3
 
-def init_db():
+def get_db_connection():
     conn = sqlite3.connect('chat.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # Создание таблицы пользователей

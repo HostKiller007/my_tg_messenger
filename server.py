@@ -3,6 +3,8 @@ from flask_socketio import SocketIO, emit, join_room
 import sqlite3
 from cryptography.fernet import Fernet
 import os
+import json
+from database import get_db_connection, init_db
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -30,14 +32,12 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Создание таблицы пользователей
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
         sid TEXT
     )''')
     
-    # Создание таблицы сообщений
     cursor.execute('''CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         room TEXT,
@@ -83,8 +83,8 @@ def handle_message(data):
     username = data['username']
     encrypted_message = data['message']
     
-    # Дешифровка сообщения
     try:
+        # Дешифровка сообщения
         decrypted_message = cipher_suite.decrypt(encrypted_message.encode()).decode()
     except Exception as e:
         print(f"Ошибка расшифровки: {e}")
@@ -96,7 +96,7 @@ def handle_message(data):
     conn.commit()
     conn.close()
 
-    # Рассылка сообщения
+    # Рассылка сообщения всем клиентам в комнате
     formatted_message = f"[{username}]: {decrypted_message}"
     emit('message', formatted_message, room=room)
 
@@ -106,6 +106,16 @@ def on_join(data):
     username = data['username']
     room = data['room']
     join_room(room)
+    
+    # Отправка истории сообщений клиенту, который присоединился
+    conn = get_db_connection()
+    messages = conn.execute("SELECT username, message, timestamp FROM messages WHERE room = ?", (room,)).fetchall()
+    conn.close()
+    
+    for msg in messages:
+        history_message = f"[{msg['username']} at {msg['timestamp']}]: {msg['message']}"
+        emit('message', history_message, room=request.sid)  # Отправляем только клиенту, который присоединился
+
     emit('message', f"{username} has entered the room.", room=room)
 
 if __name__ == '__main__':
