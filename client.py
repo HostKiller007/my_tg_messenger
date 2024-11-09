@@ -37,21 +37,11 @@ class MessengerClient:
     def on_connect(self):
         """ Вызывается при успешном подключении """
         print("Соединение установлено.")
-        self.emit_message()
+
 
     def on_disconnect(self):
         """ Вызывается при отключении """
         print("Отключено от сервера.")
-
-    def emit_message(self):
-        """ Метод для отправки сообщения """
-        encrypted_message = self.encrypt_message(self.encrypted_message)
-        print(f"Отправка сообщения: {encrypted_message}")
-        # Отправляем сообщение в правильной структуре
-        self.sio.emit('message', {
-            'nickname': self.nickname,  # Отправляем имя пользователя
-            'message': encrypted_message # Отправляем зашифрованное сообщение
-        })
 
     def handle_message(self, data):
         """ Обрабатываем новые сообщения """

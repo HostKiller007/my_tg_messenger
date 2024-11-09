@@ -252,16 +252,16 @@ class MainWindow(QtWidgets.QWidget):
         if message.strip():
             encrypted_message = self.cipher_suite.encrypt(message.encode())
 
-            # Проверяем, подключен ли сокет
-            if sio.connected:
-                # Если подключен, отправляем сообщение
+            if sio.connected:  # Проверяем подключение перед отправкой
+                # Отправляем сообщение, если соединение установлено
                 sio.emit('message', {'nickname': self.nickname, 'message': encrypted_message})
                 self.chat_area.append(f"[{self.nickname}] {message}")
             else:
-                # Если не подключен, выводим ошибку
+                # Сообщаем об ошибке подключения
                 QtWidgets.QMessageBox.warning(self, "Ошибка подключения", "Не удалось отправить сообщение. Подключитесь к серверу.")
-
+            
             self.message_entry.clear()
+
 
     def handle_new_message(data):
         print(f"Новое сообщение: {data['nickname']}: {data['message']}")
