@@ -5,10 +5,21 @@ from cryptography.fernet import Fernet
 import os
 import json
 from database import get_db_connection, init_db
+import requests
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
+
+# Обработчик для корневого маршрута
+@app.route('/')
+def home():
+    return "server is working"
+
+data = {"username": "example_user"}
+response = requests.post("http://127.0.0.1:5000/register", json=data)
+print(response.status_code)
+print(response.json())
 
 # Генерация или загрузка ключа шифрования
 if not os.path.exists('config.key'):
@@ -50,20 +61,34 @@ def init_db():
     conn.close()
 
 # Маршрут для регистрации пользователя
+# Маршрут для регистрации пользователя
+# Маршрут для регистрации пользователя
 @app.route('/register', methods=['POST'])
 def register():
-    username = request.json.get('username')
-    sid = request.headers.get('X-Socket-ID')
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "No data received"}), 400
+
+    username = data.get('username')
+    if not username:
+        return jsonify({"error": "Username is required"}), 400
+    
+    # Логика регистрации
+    conn = get_db_connection()
+    existing_user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    
+    if existing_user:
+        return jsonify({"error": "Username already taken"}), 400
     
     conn = get_db_connection()
-    try:
-        conn.execute("INSERT INTO users (username, sid) VALUES (?, ?)", (username, sid))
-        conn.commit()
-        return jsonify({"message": "User registered successfully."})
-    except sqlite3.IntegrityError:
-        return jsonify({"message": "Username already exists."}), 400
-    finally:
-        conn.close()
+    conn.execute("INSERT INTO users (username) VALUES (?)", (username,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"message": f"User '{username}' successfully registered."}), 200
+
 
 # Маршрут для получения истории сообщений
 @app.route('/messages', methods=['GET'])
@@ -120,4 +145,4 @@ def on_join(data):
 
 if __name__ == '__main__':
     init_db()  # Инициализация базы данных
-    socketio.run(app, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

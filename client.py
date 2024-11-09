@@ -1,99 +1,119 @@
 import json
+from flask import app, jsonify, request
 import socketio
-import requests  # Используем для HTTP-запроса регистрации
+import requests
 from cryptography.fernet import Fernet
 
-sio = socketio.Client()
-chat_log_callback = None  # Глобальная переменная для хранения ссылки на callback
-username = None 
+from database import get_db_connection
 
-# Загрузка ключа из файла config.key
+sio = socketio.Client()
+chat_log_callback = None  # Global variable to store the callback reference
+
+# Load the encryption key from the config file
 with open("config.key", "rb") as key_file:
     key = key_file.read()
-
 cipher_suite = Fernet(key)
 
-# Подключение
-@sio.event
-def connect():
-    print("Подключено к серверу.")
+# Function to save user data for auto-login
+def save_user_data(username, password):
+    with open("user_data.json", "w") as file:
+        json.dump({"username": username, "password": password}, file)
 
-@sio.event
-def disconnect():
-    print("Отключено от сервера.")
+# Function to load saved user data for auto-login
+def load_saved_user():
+    try:
+        with open("user_data.json", "r") as file:
+            data = json.load(file)
+            return data.get("username"), data.get("password")
+    except FileNotFoundError:
+        return None, None
 
-# Прием сообщения
+# Function to handle incoming messages
 @sio.on('message')
 def on_message(data):
     try:
-        # Дешифровка сообщения
         decrypted_message = cipher_suite.decrypt(data.encode()).decode()
-        print("Новое сообщение:", decrypted_message)
-        
+        print("Received message:", decrypted_message)
         if chat_log_callback:
-            chat_log_callback(decrypted_message)  # Обновление GUI при получении сообщения
+            chat_log_callback(decrypted_message)
     except Exception as e:
-        print(f"Ошибка расшифровки сообщения: {e}")
+        print(f"Error decrypting message: {e}")
 
-# Обработка истории сообщений, когда пользователь присоединяется к комнате
+# Function to handle history messages
 @sio.on('history')
 def on_history(data):
+    print("Received history messages:")
     for message in data:
         try:
             decrypted_message = cipher_suite.decrypt(message.encode()).decode()
-            print("История сообщения:", decrypted_message)
+            print("History message:", decrypted_message)
             if chat_log_callback:
                 chat_log_callback(decrypted_message)
         except Exception as e:
-            print(f"Ошибка расшифровки истории сообщения: {e}")
+            print(f"Error decrypting history message: {e}")
 
-# Регистрация пользователя на сервере через HTTP запрос
-def register(username):
+# Function to register a new user
+def register(username, password):
     url = 'http://192.168.0.100:5000/register'
-    headers = {'X-Socket-ID': sio.sid}
-    response = requests.post(url, json={'username': username}, headers=headers)
+    response = requests.post(url, json={'username': username, 'password': password})
     
     if response.status_code == 200:
-        print("Пользователь успешно зарегистрирован.")
+        print("User registered successfully.")
+        return True
     else:
-        print("Ошибка регистрации пользователя:", response.json().get('message'))
+        print("Error registering user:", response.json().get('message'))
+        return False
 
-# Присоединение к комнате
-def join_room(username, room):
-    sio.emit('join', {'username': username, 'room': room})
+# Function to login an existing user
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "No data received"}), 400
+    
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    
+    # Check if the user exists
+    conn = get_db_connection()
+    user = conn.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
+    conn.close()
+    
+    if user:
+        return jsonify({"message": "Login successful"}), 200
+    else:
+        return jsonify({"error": "Invalid username or password"}), 400
 
-# Отправка сообщения в комнату
-def send_message(room, message):
-    global username
-    encrypted_message = cipher_suite.encrypt(message.encode())  # Шифрование
-    sio.emit('message', {'room': room, 'username': username, 'message': encrypted_message.decode()})
-
-# Отключение пользователя от комнаты
-def leave_room(username, room):
-    sio.emit('leave', {'username': username, 'room': room})
-    sio.disconnect()
-
-# Установка колбэка для обновления чата
+# Function to set the chat log callback
 def set_chat_log_callback(callback):
     global chat_log_callback
     chat_log_callback = callback
 
-def close_client():
-    if sio.connected:
-        sio.disconnect()
-
-def start_client(username_input, room):
-    global username
-    username = username_input
-    try:
-        sio.connect('http://192.168.0.100:5000')
-        register(username)
-        join_room(username, room)
-    except socketio.exceptions.ConnectionError as e:
-        print(f"Ошибка подключения к серверу: {e}")
-
-    # Регистрация пользователя после подключения
-    register(username)
+# Function to start the client
+def start_client():
+    global username, password
+    print("Connecting to the server...")
     
-    # Присоединение к комнате после регистрации
-    join_room(username, room)
+    # Load saved user data for auto-login
+    username, password = load_saved_user()
+    
+    if not username or not password:
+        print("No saved user data found. Please enter login credentials.")
+        # Add code to prompt the user for login credentials via GUI
+    
+    sio.connect('http://192.168.0.100:5000')  # Connect to the server
+    
+    # Try to login the user
+    if login(username, password):
+        # Save the user data for auto-login
+        save_user_data(username, password)
+    else:
+        print("Error logging in user.")
+
+# Run the client
+if __name__ == "__main__":
+    start_client()

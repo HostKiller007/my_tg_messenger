@@ -8,13 +8,17 @@ from cryptography.fernet import Fernet
 
 # Путь к файлу с данными пользователей
 USER_DATA_FILE = "users.json"
-# Путь к файлу конфигурации
-CONFIG_FILE = "config.json"
 
-# Функция для загрузки конфигурации
-def load_config():
-    with open(CONFIG_FILE) as config_file:
-        return json.load(config_file)
+# Генерация или загрузка ключа шифрования
+if not os.path.exists('config.key'):
+    key = Fernet.generate_key()
+    with open('config.key', 'wb') as f:
+        f.write(key)
+else:
+    with open('config.key', 'rb') as f:
+        key = f.read()
+
+cipher_suite = Fernet(key)
 
 # Главное окно приложения
 class MainWindow(QtWidgets.QWidget):
@@ -28,9 +32,7 @@ class MainWindow(QtWidgets.QWidget):
 
         self.nickname = ""  # Инициализация никнейма
 
-        # Загрузка ключа из конфигурационного файла
-        self.key = self.load_encryption_key()
-        self.cipher_suite = Fernet(self.key)  # Инициализация шифровщика
+        self.cipher_suite = cipher_suite  # Инициализация шифровщика
 
         self.login_widget = self.create_login_widget()
         self.registration_widget = self.create_registration_widget()
@@ -56,15 +58,6 @@ class MainWindow(QtWidgets.QWidget):
             self.stacked_widget.setCurrentWidget(self.login_widget)  # Показываем экран входа
 
         self.show()
-
-    def load_encryption_key(self):
-        config_file_path = "config.json"  # Путь к вашему конфигурационному файлу
-        if os.path.exists(config_file_path):
-            with open(config_file_path, 'r') as config_file:
-                config = json.load(config_file)
-                return config["CHAT_ENCRYPTION_KEY"].encode()  # Возврат ключа в байтах
-        else:
-            raise FileNotFoundError("Файл конфигурации не найден.")
 
     def create_login_widget(self):
         widget = QtWidgets.QWidget()
@@ -170,7 +163,7 @@ class MainWindow(QtWidgets.QWidget):
         password = self.password_entry.text().strip()
 
         # Отправка запроса на сервер для проверки логина
-        response = requests.post('http://localhost:5000/register', json={'username': self.nickname, 'password': password})
+        response = requests.post('http://localhost:5000/login', json={'username': self.nickname, 'password': password})
         if response.status_code == 200:
             self.open_chat(self.nickname)
         else:
@@ -196,6 +189,7 @@ class MainWindow(QtWidgets.QWidget):
     def open_chat(self, nickname):
         self.user_info_label.setText(f"Пользователь: {nickname}")
         self.stacked_widget.setCurrentWidget(self.chat_widget)
+        self.load_messages()
         if self.remember_checkbox.isChecked():
             with open("current_user.txt", 'w') as file:
                 file.write(nickname)  # Сохранение никнейма в файл для автоматического входа
