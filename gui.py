@@ -62,9 +62,6 @@ def get_messages_from_server():
     except Exception as e:
         print(f"Ошибка при подключении к серверу: {str(e)}")
 
-
-
-
 # Главное окно приложения
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -210,10 +207,14 @@ class MainWindow(QtWidgets.QWidget):
 
         # Отправка запроса на сервер для проверки логина
         response = requests.post('http://localhost:5000/login', json={'username': self.nickname, 'password': password})
+        
         if response.status_code == 200:
-            self.open_chat(self.nickname)
+            self.open_chat(self.nickname)  # Открытие чата, если логин успешен
+        elif response.status_code == 404:
+            QtWidgets.QMessageBox.warning(self, "Ошибка", "Такого пользователя не существует.")
         else:
             QtWidgets.QMessageBox.warning(self, "Ошибка", "Неправильное имя пользователя или пароль.")
+
 
     def register(self):
         username = self.reg_nickname_entry.text().strip()

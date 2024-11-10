@@ -85,6 +85,7 @@ def register():
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
+    print(f"Received login data: {data}")
     username = data.get('username')
     password = data.get('password')
 
@@ -215,17 +216,19 @@ def add_room_column():
     conn = sqlite3.connect('your_database.db')
     cursor = conn.cursor()
     try:
-        # Добавление нового столбца 'room' в таблицу 'messages'
-        cursor.execute("ALTER TABLE messages ADD COLUMN room TEXT DEFAULT 'chat'")
-        conn.commit()
-        print("Столбец 'room' успешно добавлен.")
+        # Проверка наличия столбца 'room' в таблице
+        cursor.execute("PRAGMA table_info(messages)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'room' not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN room TEXT DEFAULT 'chat'")
+            conn.commit()
+            print("Столбец 'room' успешно добавлен.")
+        else:
+            print("Столбец 'room' уже существует.")
     except sqlite3.OperationalError as e:
         print(f"Ошибка при добавлении столбца: {e}")
     finally:
         conn.close()
-
-# Вызов функции для добавления столбца
-add_room_column()
 
 
 if __name__ == '__main__':
