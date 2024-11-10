@@ -151,7 +151,6 @@ def get_messages():
 # Обработка сообщения от пользователя через WebSocket
 @socketio.on('message')
 def handle_message(data):
-    # Проверка на наличие необходимых ключей
     if 'username' not in data or 'message' not in data:
         print("Ошибка: данные не содержат 'username' или 'message'.")
         return
@@ -159,14 +158,12 @@ def handle_message(data):
     username = data['username']
     encrypted_message = data['message']
 
-    # Расшифровка сообщения
     try:
         decrypted_message = cipher_suite.decrypt(encrypted_message.encode()).decode()
     except Exception as e:
         print(f"Ошибка при расшифровке сообщения: {e}")
         return
 
-    # Логируем полученное сообщение
     print(f"Получено сообщение от {username}: {decrypted_message}")
 
     # Сохранение сообщения в базе данных
@@ -176,9 +173,8 @@ def handle_message(data):
     conn.commit()
     conn.close()
 
-    # Отправляем ответ клиенту
-    emit('message', {'username': username, 'message': decrypted_message})
-
+    # Отправляем сообщение всем подключенным пользователям
+    emit('message', {'username': username, 'message': decrypted_message}, broadcast=True)
 
 
 # Присоединение пользователя к комнате
@@ -190,15 +186,17 @@ def on_join(data):
         return
     room = data['room']
     join_room(room)
+
     conn = sqlite3.connect('your_database.db')
     cursor = conn.cursor()
     messages = cursor.execute("SELECT username, message, timestamp FROM messages WHERE room = ?", (room,)).fetchall()
     conn.close()
-    
-    for msg in messages:
-        history_message = f"[{msg[0]} at {msg[2]}]: {msg[1]}"
-        emit('message', history_message, room=request.sid)
 
+    # Отправляем все сообщения в чат
+    for msg in messages:
+        emit('message', {'username': msg[0], 'message': msg[1]}, room=request.sid)
+
+    # Уведомление о входе в комнату
     emit('message', f"{username} has entered the room.", room=room)
 
 # Функция поиска пользователя по имени
