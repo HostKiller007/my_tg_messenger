@@ -22,7 +22,7 @@ else:
 
 cipher_suite = Fernet(key)
 
-# Пример функции для отправки сообщения с клиента
+# Функция для отправки зашифрованного сообщения на сервер
 def send_message_to_server(username, message):
     url = "http://192.168.0.100:5000/send_message"  # Путь к серверу
 
@@ -48,6 +48,7 @@ def send_message_to_server(username, message):
     except Exception as e:
         print(f"Ошибка при подключении к серверу: {str(e)}")
 
+# Функция для получения сообщений с сервера
 def get_messages_from_server():
     url = "http://192.168.0.100:5000/get_messages"
     
@@ -56,11 +57,14 @@ def get_messages_from_server():
         if response.status_code == 200:
             messages = response.json()
             for msg in messages:
-                print(f"[{msg[2]}] {msg[0]}: {msg[1]}")
+                # Дешифруем сообщение перед выводом
+                decrypted_message = cipher_suite.decrypt(msg[1].encode()).decode()
+                print(f"[{msg[2]}] {msg[0]}: {decrypted_message}")
         else:
             print(f"Ошибка при получении сообщений: {response.json()['message']}")
     except Exception as e:
         print(f"Ошибка при подключении к серверу: {str(e)}")
+
 
 # Главное окно приложения
 class MainWindow(QtWidgets.QWidget):
@@ -284,9 +288,6 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             print(f"Ошибка при сохранении сообщения: {e}")
 
-
-
-    
     def create_messages_table(self):
         conn = sqlite3.connect('your_database.db')  # Путь к вашей базе данных
         cursor = conn.cursor()

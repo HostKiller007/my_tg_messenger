@@ -108,31 +108,34 @@ def logout():
     session.pop('user_id', None)  # Удаление информации о пользователе из сессии
     return jsonify({"message": "Logged out successfully."}), 200
 
-# Отправка сообщения
+# Отправка сообщения в базу данных (с серверной стороны)
 @app.route('/send_message', methods=['POST'])
 def send_message():
-    data = request.get_json()
-    username = data.get('username')
-    message = data.get('message')
-
-    if not username or not message:
-        return jsonify({"message": "Username and message are required."}), 400
-
-    # Дешифровка сообщения
-    decrypted_message = cipher_suite.decrypt(message.encode()).decode()
-
-    # Запись сообщения в базу данных
     try:
-        conn = sqlite3.connect('your_database.db')
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO messages (room, username, message) VALUES (?, ?, ?)", ("chat", username, decrypted_message))
-        conn.commit()
-        conn.close()
+        data = request.get_json()  # Получаем данные из запроса
+        username = data.get('username')
+        message = data.get('message')
 
-        # Подтверждение клиенту с сообщением
-        return jsonify({"message": decrypted_message}), 200
+        if not username or not message:
+            raise ValueError("Отсутствуют необходимые данные (username или message)")
+
+        # Логирование полученных данных
+        app.logger.debug(f"Получены данные: username={username}, message={message}")
+
+        # Дешифровка сообщения (если оно зашифровано)
+        decrypted_message = cipher_suite.decrypt(message.encode()).decode()
+
+        # Сохраняем сообщение в базе данных или в другом хранилище
+        # database.save_message(username, decrypted_message)
+
+        app.logger.debug(f"Сообщение сохранено: {decrypted_message}")
+
+        return jsonify({'status': 'success', 'message': 'Сообщение успешно отправлено'})
+
     except Exception as e:
-        return jsonify({"message": f"Error saving message: {str(e)}"}), 500
+        # Логируем ошибку
+        app.logger.error(f"Ошибка при отправке сообщения: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 # Получение всех сообщений из чата
@@ -148,7 +151,7 @@ def get_messages():
     return jsonify(messages), 200
 
 
-# Обработка сообщения от пользователя через WebSocket
+
 @socketio.on('message')
 def handle_message(data):
     if 'username' not in data or 'message' not in data:
@@ -164,7 +167,8 @@ def handle_message(data):
         print(f"Ошибка при расшифровке сообщения: {e}")
         return
 
-    print(f"Получено сообщение от {username}: {decrypted_message}")
+    # Логируем информацию о полученном сообщении на сервере
+    app.logger.info(f"Сообщение получено: {username} '{decrypted_message}'")
 
     # Сохранение сообщения в базе данных
     conn = sqlite3.connect('your_database.db')
@@ -175,6 +179,10 @@ def handle_message(data):
 
     # Отправляем сообщение всем подключенным пользователям
     emit('message', {'username': username, 'message': decrypted_message}, broadcast=True)
+
+    # Отправляем событие 'message_received' всем клиентам, чтобы они обновили свой лог
+    emit('message_received', {'username': username, 'message': decrypted_message}, broadcast=True)
+
 
 
 # Присоединение пользователя к комнате
