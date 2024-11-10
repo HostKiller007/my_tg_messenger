@@ -243,40 +243,35 @@ class MainWindow(QtWidgets.QWidget):
     def load_messages(self):
         messages = self.get_messages_from_db()  # Получаем сообщения из базы данных
 
-        for msg in messages:
-            message_text = f"[{msg['username']}] {msg['message']}"
-            self.chat_area.append(message_text)
+        for message in messages:
+            self.chat_area.append(f"{message['username']}: {message['message']}")
 
     def send_message(self):
         message = self.message_entry.text()
-        if message.strip():
-            encrypted_message = self.cipher_suite.encrypt(message.encode())
+        if message:
+            encrypted_message = self.cipher_suite.encrypt(message.encode()).decode()
 
-            if sio.connected:  # Проверяем подключение перед отправкой
-                # Отправляем сообщение, если соединение установлено
-                sio.emit('message', {'nickname': self.nickname, 'message': encrypted_message})
-                self.chat_area.append(f"[{self.nickname}] {message}")
+            # Отправляем зашифрованное сообщение на сервер
+            response = requests.post('http://localhost:5000/send_message', json={'username': self.nickname, 'message': encrypted_message})
+            if response.status_code == 200:
+                self.chat_area.append(f"{self.nickname}: {message}")
+                self.message_entry.clear()
             else:
-                # Сообщаем об ошибке подключения
-                QtWidgets.QMessageBox.warning(self, "Ошибка подключения", "Не удалось отправить сообщение. Подключитесь к серверу.")
-            
-            self.message_entry.clear()
-
-
-    def handle_new_message(data):
-        print(f"Новое сообщение: {data['nickname']}: {data['message']}")
-
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Не удалось отправить сообщение.")
 
     def confirm_logout(self):
-        reply = QtWidgets.QMessageBox.question(self, 'Подтверждение выхода',
-                                               'Вы уверены, что хотите выйти из чата?',
-                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        reply = QtWidgets.QMessageBox.question(self, 'Выход', "Вы уверены, что хотите выйти?",
+                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
         if reply == QtWidgets.QMessageBox.Yes:
+            self.nickname = ""
             self.stacked_widget.setCurrentWidget(self.login_widget)
+            try:
+                if os.path.exists("current_user.txt"):
+                    os.remove("current_user.txt")
+            except PermissionError:
+                print("Не удалось удалить файл current_user.txt.")
 
-    set_chat_log_callback(handle_new_message)
-
-# Создаем приложение
-app = QtWidgets.QApplication(sys.argv)
-window = MainWindow()
-sys.exit(app.exec_())
+if __name__ == '__main__':
+    app = QtWidgets.QApplication(sys.argv)
+    window = MainWindow()
+    sys.exit(app.exec_())

@@ -148,10 +148,12 @@ def handle_message(data):
 # Присоединение пользователя к комнате
 @socketio.on('join')
 def on_join(data):
-    username = data['username']
+    username = data.get('username')
+    if not username:
+        print("Ошибка: username не передан")
+        return
     room = data['room']
     join_room(room)
-    
     conn = sqlite3.connect('your_database.db')
     cursor = conn.cursor()
     messages = cursor.execute("SELECT username, message, timestamp FROM messages WHERE room = ?", (room,)).fetchall()
