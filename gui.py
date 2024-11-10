@@ -24,7 +24,7 @@ cipher_suite = Fernet(key)
 
 # Пример функции для отправки сообщения с клиента
 def send_message_to_server(username, message):
-    url = "http://127.0.0.1:5000/send_message"  # Путь к серверу
+    url = "http://192.168.0.100:5000/send_message"  # Путь к серверу
 
     # Шифруем сообщение перед отправкой
     encrypted_message = cipher_suite.encrypt(message.encode()).decode()
@@ -49,7 +49,7 @@ def send_message_to_server(username, message):
         print(f"Ошибка при подключении к серверу: {str(e)}")
 
 def get_messages_from_server():
-    url = "http://127.0.0.1:5000/get_messages"
+    url = "http://192.168.0.100:5000/get_messages"
     
     try:
         response = requests.get(url)
@@ -206,7 +206,7 @@ class MainWindow(QtWidgets.QWidget):
         password = self.password_entry.text().strip()
 
         # Отправка запроса на сервер для проверки логина
-        response = requests.post('http://localhost:5000/login', json={'username': self.nickname, 'password': password})
+        response = requests.post('http://192.168.0.100:5000/login', json={'username': self.nickname, 'password': password})
         
         if response.status_code == 200:
             self.open_chat(self.nickname)  # Открытие чата, если логин успешен
@@ -226,7 +226,7 @@ class MainWindow(QtWidgets.QWidget):
             return
 
         # Отправка запроса на сервер для регистрации
-        response = requests.post('http://localhost:5000/register', json={'username': username, 'password': password})
+        response = requests.post('http://192.168.0.100:5000/register', json={'username': username, 'password': password})
         if response.status_code == 200:
             QtWidgets.QMessageBox.information(self, "Успех", "Регистрация прошла успешно!")
             self.show_login()
@@ -315,7 +315,7 @@ class MainWindow(QtWidgets.QWidget):
             encrypted_message = self.cipher_suite.encrypt(message.encode()).decode()
 
             # Отправляем зашифрованное сообщение на сервер
-            response = requests.post('http://localhost:5000/send_message', json={'username': self.nickname, 'message': encrypted_message})
+            response = requests.post('http://192.168.0.100:5000/send_message', json={'username': self.nickname, 'message': encrypted_message})
             if response.status_code == 200:
                 print(f"Сообщение успешно отправлено: {message}")  # Логирование в консоль для проверки
                 self.chat_area.append(f"{self.nickname}: {message}")
