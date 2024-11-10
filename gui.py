@@ -22,6 +22,49 @@ else:
 
 cipher_suite = Fernet(key)
 
+# Пример функции для отправки сообщения с клиента
+def send_message_to_server(username, message):
+    url = "http://127.0.0.1:5000/send_message"  # Путь к серверу
+
+    # Шифруем сообщение перед отправкой
+    encrypted_message = cipher_suite.encrypt(message.encode()).decode()
+
+    # Создаем данные для отправки
+    data = {
+        "username": username,
+        "message": encrypted_message
+    }
+
+    headers = {'Content-Type': 'application/json'}
+
+    # Отправляем сообщение на сервер
+    try:
+        response = requests.post(url, data=json.dumps(data), headers=headers)
+        if response.status_code == 200:
+            # Выводим сообщение из ответа сервера в логи клиента
+            print(f"Сообщение отправлено успешно: {response.json()['message']}")
+        else:
+            print(f"Ошибка при отправке сообщения: {response.json()['message']}")
+    except Exception as e:
+        print(f"Ошибка при подключении к серверу: {str(e)}")
+
+def get_messages_from_server():
+    url = "http://127.0.0.1:5000/get_messages"
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            messages = response.json()
+            for msg in messages:
+                print(f"[{msg[2]}] {msg[0]}: {msg[1]}")
+        else:
+            print(f"Ошибка при получении сообщений: {response.json()['message']}")
+    except Exception as e:
+        print(f"Ошибка при подключении к серверу: {str(e)}")
+
+
+
+
 # Главное окно приложения
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -211,7 +254,6 @@ class MainWindow(QtWidgets.QWidget):
     def update_chat_log(self, message):
         print(f"Новое сообщение для {self.nickname}: {message}")
 
-    # Функция для получения сообщений из базы данных
     def get_messages_from_db(self):
         self.create_messages_table()  # Убедитесь, что таблица существует перед запросом
         conn = sqlite3.connect('your_database.db')
@@ -226,6 +268,23 @@ class MainWindow(QtWidgets.QWidget):
 
         conn.close()
         return messages
+
+    def save_message_to_db(username, message):
+        try:
+            conn = sqlite3.connect('your_database.db')
+            cursor = conn.cursor()
+
+            # Вставляем новое сообщение в базу данных
+            cursor.execute("INSERT INTO messages (username, message) VALUES (?, ?)", (username, message))
+            conn.commit()
+
+            print(f"Сообщение для {username} успешно сохранено в базу данных: {message}")  # Логирование на сервере
+            conn.close()
+        except Exception as e:
+            print(f"Ошибка при сохранении сообщения: {e}")
+
+
+
     
     def create_messages_table(self):
         conn = sqlite3.connect('your_database.db')  # Путь к вашей базе данных
@@ -241,10 +300,13 @@ class MainWindow(QtWidgets.QWidget):
         conn.close()
 
     def load_messages(self):
-        messages = self.get_messages_from_db()  # Получаем сообщения из базы данных
+        # Получаем сообщения из базы данных
+        messages = self.get_messages_from_db()
 
-        for message in messages:
-            self.chat_area.append(f"{message['username']}: {message['message']}")
+        # Отображаем каждое сообщение в области чата
+        for msg in messages:
+            message_text = f"{msg['username']}: {msg['message']}"
+            self.chat_area.append(message_text)  # Добавляем сообщение в чат
 
     def send_message(self):
         message = self.message_entry.text()
@@ -254,17 +316,28 @@ class MainWindow(QtWidgets.QWidget):
             # Отправляем зашифрованное сообщение на сервер
             response = requests.post('http://localhost:5000/send_message', json={'username': self.nickname, 'message': encrypted_message})
             if response.status_code == 200:
+                print(f"Сообщение успешно отправлено: {message}")  # Логирование в консоль для проверки
                 self.chat_area.append(f"{self.nickname}: {message}")
                 self.message_entry.clear()
             else:
                 QtWidgets.QMessageBox.warning(self, "Ошибка", "Не удалось отправить сообщение.")
 
+
     def confirm_logout(self):
+        # Выводим сообщение для подтверждения выхода
         reply = QtWidgets.QMessageBox.question(self, 'Выход', "Вы уверены, что хотите выйти?",
                                                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
         if reply == QtWidgets.QMessageBox.Yes:
+            # Очистить ник пользователя
             self.nickname = ""
+
+            # Переключиться на окно логина
             self.stacked_widget.setCurrentWidget(self.login_widget)
+
+            # Очистить окно чата
+            self.chat_area.clear()
+
+            # Удалить текущего пользователя из файла, если он есть
             try:
                 if os.path.exists("current_user.txt"):
                     os.remove("current_user.txt")

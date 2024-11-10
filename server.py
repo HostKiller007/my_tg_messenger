@@ -117,16 +117,35 @@ def send_message():
     if not username or not message:
         return jsonify({"message": "Username and message are required."}), 400
 
-    messages.append({'username': username, 'message': message})
-    return jsonify({"message": "Message sent successfully!"}), 200
+    # Дешифровка сообщения
+    decrypted_message = cipher_suite.decrypt(message.encode()).decode()
 
-# Получение сообщений
-@app.route('/messages', methods=['GET'])
+    # Запись сообщения в базу данных
+    try:
+        conn = sqlite3.connect('your_database.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO messages (room, username, message) VALUES (?, ?, ?)", ("chat", username, decrypted_message))
+        conn.commit()
+        conn.close()
+
+        # Подтверждение клиенту с сообщением
+        return jsonify({"message": decrypted_message}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error saving message: {str(e)}"}), 500
+
+
+# Получение всех сообщений из чата
+@app.route('/get_messages', methods=['GET'])
 def get_messages():
-    room = request.args.get('room')
-    if room == "chat":
-        return jsonify(messages), 200
-    return jsonify({"message": "Room not found."}), 404
+    conn = sqlite3.connect('your_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, message, timestamp FROM messages WHERE room = ?", ("chat",))
+    messages = cursor.fetchall()
+    conn.close()
+
+    # Возвращаем все сообщения
+    return jsonify(messages), 200
+
 
 # Обработка сообщения от пользователя через WebSocket
 @socketio.on('message')
@@ -135,14 +154,30 @@ def handle_message(data):
     if 'username' not in data or 'message' not in data:
         print("Ошибка: данные не содержат 'username' или 'message'.")
         return
-    
+
     username = data['username']
-    message = data['message']
-    room = data['room']
-    
-    # Логика обработки сообщения...
-    print(f"Получено сообщение от {username}: {message}")
-    # Дополнительная логика...
+    encrypted_message = data['message']
+
+    # Расшифровка сообщения
+    try:
+        decrypted_message = cipher_suite.decrypt(encrypted_message.encode()).decode()
+    except Exception as e:
+        print(f"Ошибка при расшифровке сообщения: {e}")
+        return
+
+    # Логируем полученное сообщение
+    print(f"Получено сообщение от {username}: {decrypted_message}")
+
+    # Сохранение сообщения в базе данных
+    conn = sqlite3.connect('your_database.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO messages (room, username, message) VALUES (?, ?, ?)", ('chat', username, decrypted_message))
+    conn.commit()
+    conn.close()
+
+    # Отправляем ответ клиенту
+    emit('message', {'username': username, 'message': decrypted_message})
+
 
 
 # Присоединение пользователя к комнате
@@ -175,6 +210,23 @@ def find_user_by_username(username):
     conn.close()
     
     return user
+
+def add_room_column():
+    conn = sqlite3.connect('your_database.db')
+    cursor = conn.cursor()
+    try:
+        # Добавление нового столбца 'room' в таблицу 'messages'
+        cursor.execute("ALTER TABLE messages ADD COLUMN room TEXT DEFAULT 'chat'")
+        conn.commit()
+        print("Столбец 'room' успешно добавлен.")
+    except sqlite3.OperationalError as e:
+        print(f"Ошибка при добавлении столбца: {e}")
+    finally:
+        conn.close()
+
+# Вызов функции для добавления столбца
+add_room_column()
+
 
 if __name__ == '__main__':
     init_db()  # Инициализация базы данных
